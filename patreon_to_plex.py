@@ -367,7 +367,7 @@ def run(args):
             print(f"  Published: {m.published}")
             print(f"  Post ID:   {m.post_id}")
             print(f"  Thumb:     {m.thumb_path}")
-            print(f"  Desc:      {(m.description[:120] + '...') if len(m.description) > 120 else m.description!r}")
+            print(f"  Desc:      {m.description!r}")
         print("\nIf Title/Published look wrong or empty, edit TITLE_KEYS / "
               "DATE_KEYS near the top of this script to match your JSON, "
               "then re-run --inspect.")
