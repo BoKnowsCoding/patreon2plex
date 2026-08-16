@@ -245,8 +245,9 @@ def extract_meta(video_path: Path, source_root: Path) -> PostMeta:
     raw_date = find_first(data, DATE_KEYS)
     raw_id = find_first(data, ID_KEYS)
 
-    title = strip_html(str(raw_title)).splitlines()[0].strip() if raw_title else fallback_title
-    description = strip_html(str(raw_desc)) if raw_desc else ""
+    #title = strip_html(str(raw_title)).splitlines()[0].strip() if raw_title else fallback_title
+    title = str(raw_title).splitlines()[0].strip() if raw_title else fallback_title
+    description = strip_html(unicodedata.normalize('NFKC',raw_desc)) if raw_desc else ""
     published = parse_date(raw_date)
     post_id = str(raw_id) if raw_id is not None else None
 
