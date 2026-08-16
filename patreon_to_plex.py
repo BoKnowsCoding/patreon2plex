@@ -61,6 +61,7 @@ import json
 import re
 import shutil
 import sys
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from html.parser import HTMLParser
