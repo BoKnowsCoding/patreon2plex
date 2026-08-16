@@ -88,6 +88,14 @@ ID_KEYS = ["id", "postId", "post_id", "contentId", "content_id"]
 # --prefer-embed / --no-prefer-embed.
 EMBED_DIR_NAMES = {"embed", "embeds", "embedded"}
 
+# Thumbnails found under these folders are ignored when picking an episode
+# thumb -- ".thumbnails" holds patreon-dl's auto-generated video thumbnails,
+# and images sitting alongside the video in the "video" folder are usually
+# just video-player poster frames, neither of which tend to look good as
+# Plex episode art. Add more names here if your version of patreon-dl uses
+# different folder names.
+THUMB_EXCLUDE_DIR_NAMES = {".thumbnails", "video", "videos"}
+
 # Filename characters that are illegal (or awkward) on Windows/macOS/Linux.
 _ILLEGAL_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -223,17 +231,42 @@ def find_post_dir_and_json(video_path: Path, source_root: Path) -> tuple[Path, O
         current = current.parent
 
 
+def _safe_size(p: Path) -> int:
+    try:
+        return p.stat().st_size
+    except OSError:
+        return 0
+
+
 def find_thumb(post_dir: Path) -> Optional[Path]:
-    search_dirs = [post_dir, post_dir / "images"]
-    for d in search_dirs:
-        if d.is_dir():
-            imgs = sorted(
-                p for p in d.rglob("*")
-                if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
-            )
-            if imgs:
-                return imgs[0]
-    return None
+    """Pick a candidate thumbnail image for the post, skipping anything
+    under THUMB_EXCLUDE_DIR_NAMES. Prefers images found directly in an
+    'images' folder, falling back to any other non-excluded image."""
+    all_imgs = [
+        p for p in post_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+    ]
+
+    def rel_parts(p: Path) -> tuple:
+        try:
+            return p.relative_to(post_dir).parts[:-1]
+        except ValueError:
+            return p.parts[:-1]
+
+    def is_excluded(p: Path) -> bool:
+        return any(part.lower() in THUMB_EXCLUDE_DIR_NAMES for part in rel_parts(p))
+
+    candidates = [p for p in all_imgs if not is_excluded(p)]
+    candidates = [p for p in candidates if _safe_size(p) > 0]
+    if not candidates:
+        return None
+
+    def sort_key(p: Path):
+        in_images_folder = any(part.lower() == "images" for part in rel_parts(p))
+        return (0 if in_images_folder else 1, len(rel_parts(p)), str(p))
+
+    candidates.sort(key=sort_key)
+    return candidates[0]
 
 
 def extract_meta(video_path: Path, source_root: Path) -> PostMeta:
