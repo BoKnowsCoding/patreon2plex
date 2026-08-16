@@ -82,6 +82,12 @@ DATE_KEYS = [
 ]
 ID_KEYS = ["id", "postId", "post_id", "contentId", "content_id"]
 
+# When a post has a video under one of these folders (e.g. an embedded
+# YouTube video patreon-dl downloaded) AND a video under a regular media
+# folder, the "embed" one is preferred and the other is skipped -- see
+# --prefer-embed / --no-prefer-embed.
+EMBED_DIR_NAMES = {"embed", "embeds", "embedded"}
+
 # Filename characters that are illegal (or awkward) on Windows/macOS/Linux.
 _ILLEGAL_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -185,6 +191,7 @@ class PostMeta:
     post_id: Optional[str] = None
     json_path: Optional[Path] = None
     thumb_path: Optional[Path] = None
+    post_dir: Optional[Path] = None
 
 
 def load_json_files(dir_path: Path) -> list[Path]:
@@ -233,13 +240,13 @@ def extract_meta(video_path: Path, source_root: Path) -> PostMeta:
     post_dir, json_path = find_post_dir_and_json(video_path, source_root)
     fallback_title = video_path.stem
     if json_path is None:
-        return PostMeta(title=fallback_title, thumb_path=find_thumb(post_dir))
+        return PostMeta(title=fallback_title, thumb_path=find_thumb(post_dir), post_dir=post_dir)
 
     try:
         data = json.loads(json_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
         print(f"  [warn] Could not parse {json_path}: {e}", file=sys.stderr)
-        return PostMeta(title=fallback_title, json_path=json_path, thumb_path=find_thumb(post_dir))
+        return PostMeta(title=fallback_title, json_path=json_path, thumb_path=find_thumb(post_dir), post_dir=post_dir)
 
     raw_title = find_first(data, TITLE_KEYS)
     raw_desc = find_first(data, DESCRIPTION_KEYS)
@@ -259,7 +266,41 @@ def extract_meta(video_path: Path, source_root: Path) -> PostMeta:
         post_id=post_id,
         json_path=json_path,
         thumb_path=find_thumb(post_dir),
+        post_dir=post_dir,
     )
+
+
+def is_embed_video(video_path: Path, post_dir: Path) -> bool:
+    """True if `video_path` sits under a folder named like 'embed' between
+    the post directory and the file itself (patreon-dl saves downloaded
+    embedded videos, e.g. from YouTube, under such a folder)."""
+    try:
+        rel_parts = video_path.relative_to(post_dir).parts[:-1]
+    except ValueError:
+        rel_parts = video_path.parts[:-1]
+    return any(part.lower() in EMBED_DIR_NAMES for part in rel_parts)
+
+
+def drop_non_embed_duplicates(metas: list[tuple[Path, "PostMeta"]]) -> list[tuple[Path, "PostMeta"]]:
+    """When a post has both an embedded video and a regular video, keep
+    only the embedded one(s)."""
+    groups: dict[Optional[Path], list[int]] = {}
+    for i, (_, m) in enumerate(metas):
+        groups.setdefault(m.post_dir, []).append(i)
+
+    to_drop = set()
+    for post_dir, idxs in groups.items():
+        if post_dir is None or len(idxs) < 2:
+            continue
+        embed_idxs = [i for i in idxs if is_embed_video(metas[i][0], post_dir)]
+        non_embed_idxs = [i for i in idxs if i not in embed_idxs]
+        if embed_idxs and non_embed_idxs:
+            for i in non_embed_idxs:
+                print(f"  [prefer-embed] skipping {metas[i][0]} "
+                      f"(embedded video found for the same post)")
+            to_drop.update(non_embed_idxs)
+
+    return [item for i, item in enumerate(metas) if i not in to_drop]
 
 
 def find_videos(source_root: Path) -> list[Path]:
@@ -375,6 +416,13 @@ def run(args):
               "then re-run --inspect.")
         return
 
+    if args.prefer_embed:
+        before = len(metas)
+        metas = drop_non_embed_duplicates(metas)
+        skipped = before - len(metas)
+        if skipped:
+            print(f"\n[prefer-embed] skipped {skipped} non-embedded duplicate video(s)")
+
     # Sort chronologically (undated items go last, in original discovery order)
     def sort_key(item):
         _, m = item
@@ -434,6 +482,11 @@ def main():
                         "when a post has no discoverable publish date. Default: 1")
     p.add_argument("--mode", choices=["copy", "move", "link", "symlink"], default="copy",
                    help="How to place video files at the destination. Default: copy")
+    p.add_argument("--prefer-embed", dest="prefer_embed",
+                   action=argparse.BooleanOptionalAction, default=True,
+                   help="When a post has a video under both an 'embed' folder and a regular "
+                        "video/media folder, keep only the embedded one. Default: on "
+                        "(use --no-prefer-embed to keep both).")
     p.add_argument("--dry-run", action="store_true", help="Print what would happen without writing/copying anything")
     p.add_argument("--inspect", action="store_true",
                    help="Just print the metadata extracted for the first 10 videos and exit "
