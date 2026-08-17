@@ -1,4 +1,4 @@
-Turn a patreon-dl download folder into a Plex TV Show.
+Turn a patreon-dl download folder into a Plex Personal Media TV Show.
 
 ## DISCLAIMER:
 
@@ -20,6 +20,18 @@ I wanted a solution for Patreon videos similar to [ytdl-sub](https://github.com/
  
     # See what metadata gets extracted from the first few posts:
     python3 patreon_to_plex.py --source ... --inspect
+
+# Example
+
+I use this to create two separate shows in Plex for one Patreon feed based on include/exclude criteria.
+
+The first show is a general bonus content show, excluding live react / live listen videos:
+
+    python3 /opt/patreon2plex/patreon2plex.py --source "/path/to/patreon-dl/downloads/dungeonsanddads - Dungeons and Daddies" --dest "/path/to/plex/patreon/folder" --season-mode year --show-name "Dungeons & Daddies Bonuses" --exclude-title "live react" --exclude-title "live listen"
+
+And this command creates a separate "Live Listens" show:
+
+    python3 /opt/patreon2plex/patreon2plex.py --source "/path/to/patreon-dl/downloads/dungeonsanddads - Dungeons and Daddies" --dest "/path/to/plex/patreon/folder" --season-mode year --show-name "Dungeons & Daddies Live Listens" --include-title "live react" --include-title "live listen"
 
 ## How it works
 
