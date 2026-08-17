@@ -499,6 +499,22 @@ def run(args):
         m = extract_meta(v, source_root)
         metas.append((v, m))
 
+    if args.exclude_title:
+        exclude_terms = [t.lower() for t in args.exclude_title]
+        filtered = []
+        skipped = 0
+        for v, m in metas:
+            title_lower = m.title.lower()
+            hit = next((t for t in exclude_terms if t in title_lower), None)
+            if hit:
+                skipped += 1
+                print(f"  [exclude-title] skipping '{m.title}' (matched {hit!r}): {v}")
+                continue
+            filtered.append((v, m))
+        metas = filtered
+        if skipped:
+            print(f"\n[exclude-title] skipped {skipped} video(s) with excluded title text")
+
     if args.inspect:
         print("\n--- Metadata inspection (first 10) ---")
         for v, m in metas[:10]:
@@ -590,6 +606,10 @@ def main():
                    help="When a post has a video under both an 'embed' folder and a regular "
                         "video/media folder, keep only the embedded one. Default: on "
                         "(use --no-prefer-embed to keep both).")
+    p.add_argument("--exclude-title", action="append", default=[], metavar="TEXT",
+                   help="Skip any post whose title contains this text (case-insensitive). "
+                        "Repeat the flag to exclude multiple strings, e.g. "
+                        "--exclude-title 'Q&A' --exclude-title 'Behind the Scenes'")
     p.add_argument("--dry-run", action="store_true", help="Print what would happen without writing/copying anything")
     p.add_argument("--inspect", action="store_true",
                    help="Just print the metadata extracted for the first 10 videos and exit "
