@@ -499,6 +499,21 @@ def run(args):
         m = extract_meta(v, source_root)
         metas.append((v, m))
 
+    if args.include_title:
+        include_terms = [t.lower() for t in args.include_title]
+        filtered = []
+        skipped = 0
+        for v, m in metas:
+            title_lower = m.title.lower()
+            if any(t in title_lower for t in include_terms):
+                filtered.append((v, m))
+            else:
+                skipped += 1
+                print(f"  [include-title] skipping '{m.title}' (no match): {v}")
+        metas = filtered
+        if skipped:
+            print(f"\n[include-title] skipped {skipped} video(s) not matching any included title text")
+
     if args.exclude_title:
         exclude_terms = [t.lower() for t in args.exclude_title]
         filtered = []
@@ -606,6 +621,11 @@ def main():
                    help="When a post has a video under both an 'embed' folder and a regular "
                         "video/media folder, keep only the embedded one. Default: on "
                         "(use --no-prefer-embed to keep both).")
+    p.add_argument("--include-title", action="append", default=[], metavar="TEXT",
+                   help="Only keep posts whose title contains this text (case-insensitive). "
+                        "Repeat the flag to include multiple strings (a post matching ANY "
+                        "of them is kept), e.g. --include-title 'Episode' --include-title 'Special'. "
+                        "Applied before --exclude-title.")
     p.add_argument("--exclude-title", action="append", default=[], metavar="TEXT",
                    help="Skip any post whose title contains this text (case-insensitive). "
                         "Repeat the flag to exclude multiple strings, e.g. "
