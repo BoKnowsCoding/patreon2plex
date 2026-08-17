@@ -4,7 +4,7 @@ Turn a patreon-dl download folder into a Plex TV Show.
 
 This is 100% written by Anthropic's Claude. I haven't tested every possible permutation of arguments, but everything is working in my test cases.
 
-I wanted a solution for Patreon videos similar to ytdl-sub, and I have already been using patreon-dl to download my Patreon subs. This script would be simple enough to write, but menial, so it seemed like a good use case for AI. It took a little bit of time getting everything just right, so I figured I'd share it in case anyone else can use this.
+I wanted a solution for Patreon videos similar to [ytdl-sub](https://github.com/jmbannon/ytdl-sub), and I have already been using [patreon-dl](https://github.com/jmbannon/ytdl-sub) and [patreon-dl-gui](https://github.com/patrickkfkan/patreon-dl-gui) to download my Patreon subs. This script would be simple enough to write, but menial, so it seemed like a good use case for AI. It took a little bit of time getting everything just right, so I figured I'd share it in case anyone else can use this.
 
 ## Usage:
 
