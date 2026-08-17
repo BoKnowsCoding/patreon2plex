@@ -21,7 +21,7 @@ I wanted a solution for Patreon videos similar to [ytdl-sub](https://github.com/
     # See what metadata gets extracted from the first few posts:
     python3 patreon_to_plex.py --source ... --inspect
 
-# Example
+### Example
 
 I use this to create two separate shows in Plex for one Patreon feed based on include/exclude criteria.
 
@@ -84,15 +84,6 @@ This script:
   This requires ffmpeg to be installed and on PATH. Embedding uses stream
   copy (-c copy), so the original video/audio aren't re-encoded -- it's a
   fast remux, not a transcode.
- 
-  NOTE: Plex's own "Local Media Assets" agent primarily reads sidecar .nfo
-  files for TV episodes, not tags embedded in the video container itself.
-  If accurate metadata in Plex's UI matters more to you than having the
-  metadata travel with the file, sidecar .nfo files (the previous behavior
-  of this script) will likely work better with Plex specifically. Embedded
-  tags are still useful for portability, other players/tools that do read
-  them (e.g. Kodi, mpv, ffprobe, mediainfo), and for players like Jellyfin
-  that vary in how much embedded metadata they honor.
  
 IMPORTANT: patreon-dl's exact JSON layout isn't guaranteed to match what
 this script guesses. Run with --inspect first to see what was found for the
