@@ -56,7 +56,7 @@ This script:
      likely key names rather than hard-coding one path).
   3. Copies (or moves) each video into a Plex-style show layout, using
      ffmpeg to remux (not re-encode) it and embed metadata + thumbnail
-     directly into the file, instead of writing sidecar .nfo/.jpg files:
+     directly into the file:
  
         <dest>/<Show Name>/Season 2023/<Show Name> - S2023E050103 - Title.mp4
         <dest>/<Show Name>/tvshow.nfo
