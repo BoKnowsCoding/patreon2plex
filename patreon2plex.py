@@ -27,8 +27,18 @@ This script:
      ffmpeg to remux (not re-encode) it and embed metadata + thumbnail
      directly into the file, instead of writing sidecar .nfo/.jpg files:
 
-        <dest>/<Show Name>/Season 01/<Show Name> - S01E03 - Title.mp4
+        <dest>/<Show Name>/Season 2023/<Show Name> - S2023E050103 - Title.mp4
         <dest>/<Show Name>/tvshow.nfo
+
+     By default, episode numbers are date-based rather than a plain
+     incrementing counter, so filenames sort correctly by upload date even
+     if posts are processed out of order later:
+       - --season-mode=year:   mmddxx     (e.g. 050103 = May 1, 3rd upload that day)
+       - --season-mode=single: yyyymmddxx (e.g. 2023050103)
+     Posts with no discoverable publish date fall back to 9999-12-31 so
+     they still get a validly-formatted code and sort after everything
+     dated. Pass --sequential-episodes to use the old plain E001, E002...
+     numbering instead.
 
      Title, description, publish date, and post ID are written as container
      metadata tags. The post's thumbnail (if any) is embedded as attached
@@ -80,8 +90,7 @@ import re
 import shutil
 import subprocess
 import sys
-import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
@@ -407,7 +416,7 @@ def mimetype_for_image(path: Path) -> str:
     return MIME_BY_IMAGE_EXT.get(path.suffix.lower(), "application/octet-stream")
 
 
-def build_metadata_args(meta: PostMeta, show_name: str, season: int, episode: int) -> list[str]:
+def build_metadata_args(meta: PostMeta, show_name: str, season: int, episode: str) -> list[str]:
     args = [
         "-metadata", f"title={meta.title}",
         "-metadata", f"show={show_name}",
@@ -425,7 +434,7 @@ def build_metadata_args(meta: PostMeta, show_name: str, season: int, episode: in
 
 
 def embed_and_place_video(ffmpeg: Optional[str], src: Path, dest: Path, meta: PostMeta,
-                           show_name: str, season: int, episode: int,
+                           show_name: str, season: int, episode: str,
                            mode: str, dry_run: bool):
     if dest.exists():
         print(f"  [skip] already exists: {dest}")
@@ -494,6 +503,35 @@ def season_for(meta: PostMeta, season_mode: str, fixed_season: int) -> int:
         return meta.published.year
     # Fallback when there's no date to key off of
     return fixed_season
+
+
+def episode_code_for(meta: PostMeta, season: int, season_mode: str,
+                      sequential: bool, day_counters: dict, seq_counters: dict) -> str:
+    """
+    Default: a date-based episode code so filenames sort by upload date
+    without needing a separate incrementing counter kept in sync elsewhere.
+      - season_mode == "year":   mmddxx  (e.g. 050103 = May 1st, 3rd upload that day)
+      - season_mode == "single": yyyymmddxx (e.g. 2023050103)
+    Posts with no discoverable publish date fall back to 9999-12-31 (sorts
+    after all real dates, keeps the code's digit width consistent).
+
+    If `sequential` is True, instead returns the old-style plain
+    incrementing number (001, 002, ...) per season.
+    """
+    if sequential:
+        seq_counters[season] = seq_counters.get(season, 0) + 1
+        return f"{seq_counters[season]:03d}"
+
+    effective_date = meta.published or datetime.max
+    if season_mode == "single":
+        date_key = effective_date.strftime("%Y%m%d")
+    else:
+        date_key = effective_date.strftime("%m%d")
+
+    counter_key = (season, date_key)
+    day_counters[counter_key] = day_counters.get(counter_key, 0) + 1
+    xx = day_counters[counter_key]
+    return f"{date_key}{xx:02d}"
 
 
 def run(args):
@@ -583,19 +621,20 @@ def run(args):
               "will NOT be embedded -- videos will just be plain-copied. "
               "Install ffmpeg and make sure it's on PATH to enable embedding.")
 
-    episode_counters: dict[int, int] = {}
+    day_counters: dict = {}
+    seq_counters: dict = {}
     placed = 0
 
     for video_path, meta in metas:
         season = season_for(meta, args.season_mode, args.season)
-        episode_counters[season] = episode_counters.get(season, 0) + 1
-        episode = episode_counters[season]
+        episode = episode_code_for(meta, season, args.season_mode,
+                                    args.sequential_episodes, day_counters, seq_counters)
 
         season_dir = show_dir / f"Season {season:02d}"
-        base_name = f"{show_name} - S{season:02d}E{episode:03d} - {sanitize(meta.title)}"
+        base_name = f"{show_name} - S{season:02d}E{episode} - {sanitize(meta.title)}"
         video_dest = season_dir / f"{base_name}{video_path.suffix.lower()}"
 
-        print(f"\n[{season:02d}x{episode:03d}] {meta.title}")
+        print(f"\n[{season:02d}x{episode}] {meta.title}")
         embed_and_place_video(ffmpeg, video_path, video_dest, meta, show_name,
                                season, episode, args.mode, args.dry_run)
 
@@ -603,12 +642,8 @@ def run(args):
 
     print(f"\nDone. Processed {placed} episode(s) into: {show_dir}")
     print("In Plex: create/edit the library, set its agent to "
-          "'Local Media Assets (TV)', and enable 'Prefer local metadata' "
-          "under the library's Advanced settings so it reads tvshow.nfo. "
-          "Note that Plex's episode metadata generally comes from sidecar "
-          ".nfo files rather than tags embedded in the video itself, so "
-          "per-episode titles/descriptions in Plex's UI may still show as "
-          "auto-generated from the filename.")
+          "'Plex Personal Media', and enable 'Prefer local metadata' "
+          "under the library's Advanced settings so it reads tvshow.nfo. ")
 
 
 def main():
@@ -624,6 +659,11 @@ def main():
     p.add_argument("--season", type=int, default=1,
                    help="Season number to use for --season-mode=single, or as a fallback "
                         "when a post has no discoverable publish date. Default: 1")
+    p.add_argument("--sequential-episodes", action="store_true",
+                   help="Use old-style plain incrementing episode numbers (E001, E002, ...) "
+                        "per season. Default is date-based numbering instead: mmddxx "
+                        "(month, day, 2-digit counter for multiple uploads that day) under "
+                        "--season-mode=year, or yyyymmddxx under --season-mode=single.")
     p.add_argument("--mode", choices=["copy", "move"], default="copy",
                    help="'copy' (default): leave the original video in place, write the "
                         "embedded-metadata version to the destination. 'move': same, but "
