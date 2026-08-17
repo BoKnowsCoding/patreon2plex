@@ -126,6 +126,13 @@ EMBED_DIR_NAMES = {"embed", "embeds", "embedded"}
 # different folder names.
 THUMB_EXCLUDE_DIR_NAMES = {".thumbnails", "video", "videos"}
 
+# Video files sitting under a folder with one of these names (anywhere
+# under a post) are skipped entirely -- e.g. "video_preview" holds
+# low-quality preview clips patreon-dl saves alongside the real video,
+# which we don't want treated as an episode. Add more names here if your
+# version of patreon-dl uses different folder names.
+EXCLUDED_VIDEO_DIR_NAMES = {"video_preview"}
+
 # Filename characters that are illegal (or awkward) on Windows/macOS/Linux.
 _ILLEGAL_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -162,6 +169,7 @@ def strip_html(text: str) -> str:
     stripper = _HTMLStripper()
     try:
         stripper.feed(text)
+        stripper.close()
         return re.sub(r"\n{3,}", "\n\n", stripper.get_text())
     except Exception:
         # Fall back to a crude tag stripper if something malformed shows up.
@@ -316,9 +324,10 @@ def extract_meta(video_path: Path, source_root: Path) -> PostMeta:
     raw_date = find_first(data, DATE_KEYS)
     raw_id = find_first(data, ID_KEYS)
 
-    #title = strip_html(str(raw_title)).splitlines()[0].strip() if raw_title else fallback_title
-    title = str(raw_title).splitlines()[0].strip() if raw_title else fallback_title
-    description = strip_html(unicodedata.normalize('NFKC',raw_desc)) if raw_desc else ""
+    stripped_title = strip_html(str(raw_title)) if raw_title else ""
+    title_lines = stripped_title.splitlines()
+    title = title_lines[0].strip() if title_lines and title_lines[0].strip() else fallback_title
+    description = strip_html(str(raw_desc)) if raw_desc else ""
     published = parse_date(raw_date)
     post_id = str(raw_id) if raw_id is not None else None
 
@@ -366,10 +375,15 @@ def drop_non_embed_duplicates(metas: list[tuple[Path, "PostMeta"]]) -> list[tupl
     return [item for i, item in enumerate(metas) if i not in to_drop]
 
 
+def is_in_excluded_dir(path: Path, excluded_names: set) -> bool:
+    return any(part.lower() in excluded_names for part in path.parts[:-1])
+
+
 def find_videos(source_root: Path) -> list[Path]:
     return sorted(
         p for p in source_root.rglob("*")
         if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
+        and not is_in_excluded_dir(p, EXCLUDED_VIDEO_DIR_NAMES)
     )
 
 
